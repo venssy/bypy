@@ -363,7 +363,11 @@ class ByPy(object):
 		self.__resumedownload = resumedownload
 		self.__extraupdate = extraupdate
 		self.__incregex = incregex
-		self.__incregmo = re.compile(incregex)
+		self.__excregex = excregex
+		#self.__incregmo = re.compile(incregex)
+		self.__incfnmatch = incregex.split(",")
+		#self.__excregmo = re.compile(excregex)
+		self.__excfnmatch = excregex.split(",")
 		if ondup and len(ondup) > 0:
 			self.__ondup = ondup[0].upper()
 		else:
@@ -878,12 +882,34 @@ class ByPy(object):
 				lpath, arrow, rpath))
 			return False
 
-		include = (not self.__incregex) or self.__incregmo.match(checkpath)
+		if checkpath == ".":
+			checkpath = rpath[11:]+"/"
+		exclude = self.__shallexclude(checkpath, lpath, arrow, rpath)
+		if exclude:
+			return False
+
+		#include = (not self.__incregex) or self.__incregmo.match(checkpath)
+		include = (not self.__incregex) or self.__shallfnmatch(self.__incfnmatch, checkpath)
 		if not include:
 			self.pv("'{}' {} '{}' skipped as it's not included in the regex pattern".format(
 				lpath, arrow, rpath))
 
 		return include
+	
+	def __shallexclude(self, checkpath, lpath, arrow, rpath):
+		exclude = self.__excregex and self.__shallfnmatch(self.__excfnmatch, checkpath)
+		if exclude:
+			self.pv("'{}' {} '{}' skipped as it's excluded in the regex pattern".format(
+				lpath, arrow, rpath))
+		
+		return exclude
+	
+	def __shallfnmatch(self, patterns, checkpath):
+		filename = os.path.basename(checkpath)
+		for pattern in patterns:
+			if fnmatch.fnmatch(checkpath, pattern) or fnmatch.fnmatch(filename, pattern):
+				return True
+		return False
 
 	ListFormatDict = {
 		'$t' : (lambda json: ls_type(json['isdir'])),
@@ -3449,7 +3475,10 @@ def getparser():
 		help="resume instead of restarting when downloading if local file already exists [default: %(default)s]")
 	parser.add_argument("--include-regex",
 		dest="incregex", default='',
-		help="regular expression of files to include. if not specified (default), everything is included. for download, the regex applies to the remote files; for upload, the regex applies to the local files. to exclude files, think about your regex, some tips here: https://stackoverflow.com/questions/406230/regular-expression-to-match-string-not-containing-a-word [default: %(default)s]")
+		help="regular expression of files to include. if not specified (default), everything is included. for download, the regex applies to the remote files; for upload, the regex applies to the local files. to exclude files, think about your regex, some tips here: https://docs.python.org/2/library/fnmatch.html [example: \"*.py,data/[a-z].pyc\"]")
+	parser.add_argument("--exclude-regex",
+		dest="excregex", default='',
+		help="regular expression of files to exclude. exclude regex will match before include regex. if not specified (default), everything is included. for download, the regex applies to the remote files; for upload, the regex applies to the local files. to exclude files, think about your regex, some tips here: https://docs.python.org/2/library/fnmatch.html [example: \"*.py,data/[a-z].pyc\"]")
 	parser.add_argument("--on-dup",
 		dest="ondup", default='overwrite',
 		help="what to do when the same file / folder exists in the destination: 'overwrite', 'skip', 'prompt' [default: %(default)s]")
